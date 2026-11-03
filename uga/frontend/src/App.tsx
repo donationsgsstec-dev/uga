@@ -252,41 +252,6 @@ export default function App() {
                 <h2>Build activity</h2>
                 <LogStream events={events} />
               </div>
-
-              <div className="card">
-                <h2>Details</h2>
-                <div className="kv">
-                  <span className="k">status</span>
-                  <span className="v">{active.status}</span>
-                  <span className="k">stage</span>
-                  <span className="v">{active.stage}</span>
-                  <span className="k">mode</span>
-                  <span className="v">{active.mode}</span>
-                  <span className="k">entry</span>
-                  <span className="v">{active.entry || "—"}</span>
-                  <span className="k">port</span>
-                  <span className="v">{active.internal_port ?? "static"}</span>
-                  <span className="k">workspace</span>
-                  <span className="v">{active.workspace}</span>
-                </div>
-                {active.last_error && (
-                  <div className="banner error" style={{ marginTop: 12 }}>
-                    {active.last_error}
-                  </div>
-                )}
-                {active.files.length > 0 && (
-                  <>
-                    <h2 style={{ marginTop: 16 }}>Files</h2>
-                    <div className="files">
-                      {active.files.map((file) => (
-                        <span className="file" key={file}>
-                          {file}
-                        </span>
-                      ))}
-                    </div>
-                  </>
-                )}
-              </div>
             </div>
 
             <div className="col">
@@ -328,6 +293,41 @@ export default function App() {
                       ? "Building… the preview appears when the app is running."
                       : "App is not running. Press Start to launch it."}
                   </div>
+                )}
+              </div>
+
+              <div className="card">
+                <h2>Details</h2>
+                <div className="kv">
+                  <span className="k">status</span>
+                  <span className="v">{active.status}</span>
+                  <span className="k">stage</span>
+                  <span className="v">{active.stage}</span>
+                  <span className="k">mode</span>
+                  <span className="v">{active.mode}</span>
+                  <span className="k">entry</span>
+                  <span className="v">{active.entry || "—"}</span>
+                  <span className="k">port</span>
+                  <span className="v">{active.internal_port ?? "static"}</span>
+                  <span className="k">workspace</span>
+                  <span className="v">{active.workspace}</span>
+                </div>
+                {active.last_error && (
+                  <div className="banner error" style={{ marginTop: 12 }}>
+                    {active.last_error}
+                  </div>
+                )}
+                {active.files.length > 0 && (
+                  <>
+                    <h2 style={{ marginTop: 16 }}>Files</h2>
+                    <div className="files">
+                      {active.files.map((file) => (
+                        <span className="file" key={file}>
+                          {file}
+                        </span>
+                      ))}
+                    </div>
+                  </>
                 )}
               </div>
             </div>
