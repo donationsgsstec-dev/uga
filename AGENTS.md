@@ -29,6 +29,21 @@ to get wrong:
   - `GET /api/conversations/<id>/events/search` **caps `limit` at 100** and
     paginates with `next_page_id`. Do not request more than 100 per call.
 - **Model**: `openhands/deepseek-v4.1-flash` (provider profile `Default`).
+- **Per-user tokens**: the agent server owns LLM credentials, so UGA never has
+  to store raw keys:
+  - `POST /api/profiles/{name}/validate` with `{llm:{model,api_key,base_url?}}`
+    returns `{valid, error}` — a real auth check, usable as a pre-flight.
+  - `POST /api/llm/provider-connections` (`display_name, provider, api_key,
+    base_url?`) stores a key server-side and returns an `id`; conversations can
+    then use `agent_settings.llm.provider_connection_id` instead of an inline
+    key. `GET`/`DELETE /api/llm/provider-connections[/{id}]` manage them.
+  - OAuth-style sign-in is the **OpenAI subscription device flow**
+    (`/api/llm/subscription/openai/device/{start,poll}`, `.../status`,
+    `.../logout`). There is no all-hands.dev/openhands.com OAuth in this
+    runtime, so "log in with OpenHands" == this device flow or a BYO API key.
+  - `POST /api/conversations` accepts `agent_settings.llm` with either
+    `provider_connection_id` (api-key users) or
+    `{auth_type:"subscription", subscription_vendor:"openai"}` (device users).
 - **Public hosts**: `work-1` serves the UGA console, `work-2` serves app
   previews. Both are the same container on ports `12000` and `12001`.
   The host pattern is `work-1-<runtime-id>.prod-runtime.all-hands.dev`
@@ -73,6 +88,21 @@ uga/
 - Keep the pipeline observable: every stage should `log(app_id, ...)` so the UI
   and `logs/pipeline.log` stay in sync.
 
+## Auth (sign-in with the user's own token)
+
+- `backend/auth.py` holds sessions + users, persisted to `data/auth.json`
+  (gitignored). Sessions are opaque ids in the `uga_session` HttpOnly cookie.
+- Every `/api/apps*` route depends on `main.current_user` and is owner-scoped.
+  Apps with an empty `owner_id` predate sign-in and stay visible to everyone.
+- Sign-in methods: `api-key` (BYO key → provider connection on the agent
+  server), `device` (OpenAI device flow), `demo` (platform token; toggle with
+  `UGA_ALLOW_DEMO_LOGIN=0`).
+- The build uses the owner's token: `orchestrator._run_build` resolves
+  `auth_store.get_user(record.owner_id).llm_settings()` and passes it as
+  `agent_settings.llm`. Demo owners get `None` → platform default profile.
+- **Never** persist a raw API key in UGA; store the agent-server
+  `provider_connection_id` plus a fingerprint only.
+
 ## Testing checklist
 
 After backend changes, verify all three build modes still work:
@@ -86,3 +116,7 @@ After backend changes, verify all three build modes still work:
 
 Also exercise: follow-up `POST /api/apps/<id>/prompt`, `rebuild`, `start`,
 `stop`, and `DELETE`.
+
+Auth checks: `/api/apps*` must return 401 without a session; sign in with
+`POST /api/auth/login/demo`, then confirm `GET /api/apps` lists the legacy
+ownerless app; `POST /api/auth/logout` must make it 401 again.

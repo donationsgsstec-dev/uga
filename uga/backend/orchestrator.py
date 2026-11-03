@@ -12,6 +12,7 @@ from typing import Any
 
 from . import agent as agent_mod
 from . import config, runner
+from .auth import auth_store
 from .store import AppRecord, store
 
 HISTORY_LIMIT = 600
@@ -122,6 +123,11 @@ def _run_build(app_id: str, prompt: str, continue_conversation: bool) -> None:
         return
     client = agent_mod.AgentClient()
 
+    # The build runs on the app owner's own token; fall back to the platform
+    # default profile for demo/anonymous owners.
+    owner = auth_store.get_user(record.owner_id) if record.owner_id else None
+    llm = owner.llm_settings() if owner else None
+
     try:
         if not client.healthy():
             raise runner.RunnerError("local agent server is not reachable")
@@ -133,9 +139,10 @@ def _run_build(app_id: str, prompt: str, continue_conversation: bool) -> None:
             conversation_id = record.conversation_id
         else:
             store.update(app_id, status="building", stage="agent is writing code", last_error="")
-            log(app_id, "stage", f"Starting build: {prompt}")
+            source = owner.token_source if owner else "platform"
+            log(app_id, "stage", f"Starting build on {source} token: {prompt}")
             conversation_id = client.start_conversation(
-                str(record.workspace), build_prompt(record.name, prompt)
+                str(record.workspace), build_prompt(record.name, prompt), llm=llm
             )
             store.update(app_id, conversation_id=conversation_id)
             log(app_id, "info", f"Agent conversation {conversation_id} started")

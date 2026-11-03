@@ -30,6 +30,7 @@ class AppRecord:
     id: str
     name: str
     prompt: str = ""
+    owner_id: str = ""
     status: str = "created"  # created|building|deploying|running|error|stopped
     stage: str = "queued"
     mode: str = "unknown"  # static|node|python|unknown
@@ -92,13 +93,19 @@ class Store:
         with self._lock:
             return sorted(self._apps.values(), key=lambda a: a.created_at, reverse=True)
 
+    def list_for_owner(self, owner_id: str) -> list[AppRecord]:
+        # Legacy apps created before sign-in existed have no owner; keep them
+        # visible to every signed-in user so nothing disappears on upgrade.
+        with self._lock:
+            return [a for a in self.list() if a.owner_id in (owner_id, "")]
+
     def get(self, app_id: str) -> AppRecord | None:
         with self._lock:
             return self._apps.get(app_id)
 
-    def create(self, name: str, prompt: str) -> AppRecord:
+    def create(self, name: str, prompt: str, owner_id: str = "") -> AppRecord:
         app_id = new_app_id(name)
-        record = AppRecord(id=app_id, name=name or "Untitled app", prompt=prompt)
+        record = AppRecord(id=app_id, name=name or "Untitled app", prompt=prompt, owner_id=owner_id)
         (record.workspace).mkdir(parents=True, exist_ok=True)
         (record.base_dir / "logs").mkdir(parents=True, exist_ok=True)
         record.preview_path = f"/p/{app_id}/"

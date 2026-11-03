@@ -10,6 +10,7 @@ export interface AppRecord {
   id: string;
   name: string;
   prompt: string;
+  owner_id: string;
   status: AppStatus;
   stage: string;
   mode: string;
@@ -44,4 +45,36 @@ export interface PipelineEvent {
   detail?: string;
   status?: string;
   url?: string;
+}
+
+export type TokenSource = "api_key" | "subscription" | "demo";
+
+export interface User {
+  id: string;
+  token_source: TokenSource;
+  model: string;
+  provider: string;
+  base_url: string | null;
+  key_fingerprint: string;
+  account_email: string;
+  created_at: number;
+}
+
+export interface AuthMethods {
+  free: boolean;
+  free_model: string;
+  forced_model: string;
+  demo: boolean;
+  default_provider: string;
+  subscription_vendor: string;
+  providers: string[];
+}
+
+export interface DeviceStart {
+  attempt_id: string;
+  user_code: string;
+  verification_uri: string;
+  verification_uri_complete: string | null;
+  expires_at: number | null;
+  interval_seconds: number;
 }

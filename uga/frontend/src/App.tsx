@@ -1,7 +1,8 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import { api, subscribeEvents } from "./api";
-import type { AppRecord, PipelineEvent } from "./types";
+import { api, subscribeEvents, UnauthorizedError } from "./api";
+import type { AppRecord, AuthMethods, PipelineEvent, User } from "./types";
 import LogStream from "./components/LogStream";
+import Login from "./components/Login";
 import StatusPill from "./components/StatusPill";
 
 const EXAMPLES = [
@@ -28,6 +29,9 @@ function previewUrl(app: AppRecord): string {
 }
 
 export default function App() {
+  const [authState, setAuthState] = useState<"loading" | "out" | "in">("loading");
+  const [user, setUser] = useState<User | null>(null);
+  const [methods, setMethods] = useState<AuthMethods | null>(null);
   const [apps, setApps] = useState<AppRecord[]>([]);
   const [selected, setSelected] = useState<string | null>(null);
   const [events, setEvents] = useState<PipelineEvent[]>([]);
@@ -40,19 +44,57 @@ export default function App() {
 
   const active = useMemo(() => apps.find((a) => a.id === selected) ?? null, [apps, selected]);
 
+  // ---- auth bootstrap ------------------------------------------------------
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      try {
+        const [me, methodList] = await Promise.all([api.me(), api.authMethods()]);
+        if (cancelled) return;
+        setMethods(methodList);
+        if (me.authenticated && me.user) {
+          setUser(me.user);
+          setAuthState("in");
+        } else {
+          setAuthState("out");
+        }
+      } catch {
+        if (!cancelled) setAuthState("out");
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const signOut = useCallback(async () => {
+    await api.logout().catch(() => undefined);
+    unsubscribe.current?.();
+    setUser(null);
+    setApps([]);
+    setSelected(null);
+    setEvents([]);
+    setAuthState("out");
+  }, []);
+
   const refresh = useCallback(async () => {
     try {
       setApps(await api.listApps());
     } catch (err) {
+      if (err instanceof UnauthorizedError) {
+        setAuthState("out");
+        return;
+      }
       setError(String(err));
     }
   }, []);
 
   useEffect(() => {
+    if (authState !== "in") return;
     refresh();
     const timer = setInterval(refresh, 4000);
     return () => clearInterval(timer);
-  }, [refresh]);
+  }, [authState, refresh]);
 
   useEffect(() => {
     if (!selected) return;
@@ -123,6 +165,28 @@ export default function App() {
 
   const working = active ? ["building", "deploying"].includes(active.status) : false;
 
+  if (authState === "loading") {
+    return (
+      <div className="login-shell">
+        <div className="login-card" style={{ textAlign: "center" }}>
+          <span className="spin" /> <span style={{ color: "var(--muted)" }}>Loading…</span>
+        </div>
+      </div>
+    );
+  }
+
+  if (authState === "out") {
+    return (
+      <Login
+        methods={methods}
+        onSignedIn={(signedIn) => {
+          setUser(signedIn);
+          setAuthState("in");
+        }}
+      />
+    );
+  }
+
   return (
     <div className="shell">
       <aside className="sidebar">
@@ -133,6 +197,7 @@ export default function App() {
             <p>describe it · we build &amp; run it</p>
           </div>
         </div>
+        <UserMenu user={user} onSignOut={signOut} />
         <div className="sidebar-head">
           <span>Apps</span>
           <span>{apps.length}</span>
@@ -334,6 +399,79 @@ export default function App() {
           </div>
         )}
       </main>
+    </div>
+  );
+}
+
+const TOKEN_LABEL: Record<string, string> = {
+  api_key: "your API key",
+  subscription: "your OpenAI account",
+  free: "free model",
+  demo: "free model",
+};
+
+const PLATFORM_TOKENS = new Set(["free", "demo"]);
+
+function UserMenu({ user, onSignOut }: { user: User | null; onSignOut: () => void }) {
+  const [open, setOpen] = useState(false);
+  const ref = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const onClick = (event: MouseEvent) => {
+      if (ref.current && !ref.current.contains(event.target as Node)) setOpen(false);
+    };
+    document.addEventListener("mousedown", onClick);
+    return () => document.removeEventListener("mousedown", onClick);
+  }, []);
+
+  if (!user) return null;
+  const onPlatform = PLATFORM_TOKENS.has(user.token_source);
+  const label = TOKEN_LABEL[user.token_source] ?? user.token_source;
+  const initials = onPlatform
+    ? "F"
+    : (user.account_email || user.key_fingerprint || "U")[0].toUpperCase();
+
+  return (
+    <div className="user-menu" ref={ref}>
+      <button className="user-btn" onClick={() => setOpen((v) => !v)}>
+        <span className="avatar">{initials}</span>
+        <span className="user-meta">
+          <span className="who">Billing: {label}</span>
+          <span className="model">{user.model}</span>
+        </span>
+        <span className="caret">{open ? "▲" : "▼"}</span>
+      </button>
+      {open && (
+        <div className="user-pop">
+          <div className="kv" style={{ gridTemplateColumns: "70px 1fr" }}>
+            <span className="k">token</span>
+            <span className="v">{user.token_source}</span>
+            <span className="k">model</span>
+            <span className="v">{user.model}</span>
+            {user.provider && (
+              <>
+                <span className="k">provider</span>
+                <span className="v">{user.provider}</span>
+              </>
+            )}
+            {user.key_fingerprint && (
+              <>
+                <span className="k">key</span>
+                <span className="v">{user.key_fingerprint}</span>
+              </>
+            )}
+            {user.account_email && (
+              <>
+                <span className="k">account</span>
+                <span className="v">{user.account_email}</span>
+              </>
+            )}
+          </div>
+          <button className="btn" style={{ width: "100%", marginTop: 12 }} onClick={onSignOut}>
+            {onPlatform ? "Use your own token" : "Sign out"}
+          </button>
+        </div>
+      )}
     </div>
   );
 }

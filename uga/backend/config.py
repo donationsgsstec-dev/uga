@@ -31,6 +31,22 @@ AGENT_SERVER_URL = os.environ.get("UGA_AGENT_SERVER_URL", "http://127.0.0.1:6000
 AGENT_MODEL = os.environ.get("UGA_MODEL", "openhands/deepseek-v4.1-flash")
 AGENT_MAX_ITERATIONS = int(os.environ.get("UGA_MAX_ITERATIONS", "150"))
 
+# When set, every build runs on this model regardless of the user's token or
+# sign-in method. Empty (the default) honours each user's own model.
+FORCED_MODEL = os.environ.get("UGA_FORCED_MODEL", "").strip()
+
+
+def resolve_model(requested: str | None = None) -> str:
+    """The model a build should actually use.
+
+    A non-empty ``FORCED_MODEL`` always wins, so the whole deployment is pinned
+    to one model; otherwise the caller's requested model is used, falling back
+    to the platform default.
+    """
+    if FORCED_MODEL:
+        return FORCED_MODEL
+    return (requested or "").strip() or AGENT_MODEL
+
 
 def _discover_session_api_key() -> str | None:
     """The agent server authenticates ``/api/*`` with an X-Session-API-Key header.

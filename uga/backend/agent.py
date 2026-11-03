@@ -71,16 +71,102 @@ class AgentClient:
         except httpx.HTTPError:
             return False
 
+    # ------------------------------------------------------------------ #
+    # LLM credentials (per-user tokens)
+    # ------------------------------------------------------------------ #
+    def validate_llm(self, llm: dict[str, Any], *, profile: str = "uga-preflight") -> tuple[bool, str]:
+        """Pre-flight an LLM config. Returns (valid, error_message)."""
+        try:
+            resp = self._client.post(
+                f"/api/profiles/{profile}/validate", json={"llm": llm}, headers=self._headers()
+            )
+        except httpx.HTTPError as exc:
+            return False, f"could not reach the agent server: {exc}"
+        if resp.status_code != 200:
+            return False, f"validation failed: {resp.status_code} {resp.text[:200]}"
+        payload = resp.json()
+        if payload.get("valid"):
+            return True, ""
+        error = payload.get("error") or {}
+        return False, error.get("message") or "the provider rejected this credential"
+
+    def create_provider_connection(
+        self, *, display_name: str, provider: str, api_key: str, base_url: str | None = None
+    ) -> str:
+        body: dict[str, Any] = {
+            "display_name": display_name,
+            "provider": provider or "custom",
+            "api_key": api_key,
+        }
+        if base_url:
+            body["base_url"] = base_url
+        resp = self._client.post(
+            "/api/llm/provider-connections", json=body, headers=self._headers()
+        )
+        if resp.status_code not in (200, 201):
+            raise AgentServerError(
+                f"create_provider_connection failed: {resp.status_code} {resp.text[:300]}"
+            )
+        return resp.json()["id"]
+
+    def delete_provider_connection(self, connection_id: str) -> None:
+        try:
+            self._client.delete(
+                f"/api/llm/provider-connections/{connection_id}", headers=self._headers()
+            )
+        except httpx.HTTPError:
+            pass
+
+    def list_providers(self) -> list[str]:
+        resp = self._client.get("/api/llm/providers", headers=self._headers())
+        if resp.status_code != 200:
+            return []
+        return resp.json().get("providers", [])
+
+    # ---- subscription (device-code) sign-in --------------------------------
+    def subscription_status(self) -> dict[str, Any]:
+        resp = self._client.get(
+            "/api/llm/subscription/openai/status", headers=self._headers()
+        )
+        return resp.json() if resp.status_code == 200 else {"connected": False}
+
+    def subscription_device_start(self) -> dict[str, Any]:
+        resp = self._client.post(
+            "/api/llm/subscription/openai/device/start", headers=self._headers()
+        )
+        if resp.status_code != 200:
+            raise AgentServerError(
+                f"device login unavailable: {resp.status_code} {resp.text[:200]}"
+            )
+        return resp.json()
+
+    def subscription_device_poll(self, device_code: str) -> dict[str, Any]:
+        resp = self._client.post(
+            "/api/llm/subscription/openai/device/poll",
+            json={"device_code": device_code},
+            headers=self._headers(),
+        )
+        if resp.status_code != 200:
+            return {"connected": False, "pending": True}
+        return resp.json()
+
+    def subscription_logout(self) -> None:
+        try:
+            self._client.post("/api/llm/subscription/openai/logout", headers=self._headers())
+        except httpx.HTTPError:
+            pass
+
     def start_conversation(
         self,
         workspace: str,
         message: str,
         *,
         max_iterations: int | None = None,
+        llm: dict[str, Any] | None = None,
     ) -> str:
         payload = {
             "workspace": {"working_dir": workspace, "kind": "LocalWorkspace"},
-            "agent_settings": {"llm": {"model": config.AGENT_MODEL}},
+            "agent_settings": {"llm": llm or {"model": config.AGENT_MODEL}},
             "initial_message": {
                 "role": "user",
                 "content": [{"type": "text", "text": message}],
