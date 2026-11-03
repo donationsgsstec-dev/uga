@@ -1,0 +1,11 @@
+__pycache__/
+*.py[cod]
+.venv/
+venv/
+node_modules/
+dist/
+*.tsbuildinfo
+
+# generated apps and runtime state
+uga/apps/
+uga/data/
