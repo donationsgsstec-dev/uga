@@ -88,12 +88,30 @@ python3 run.py
 Then open the console host (`work-1` when running in a hosted runtime) and
 describe an app.
 
+### Deploy it
+
+A single-container deployment (console + preview + agent server) is ready for
+Fly.io — see [DEPLOY.md](../DEPLOY.md). The image is built from the repository
+root:
+
+```bash
+fly volumes create uga_data --size 10 --region iad
+fly secrets set OH_SECRET_KEY="$(openssl rand -hex 32)" \
+                UGA_AGENT_SESSION_KEY="$(openssl rand -hex 32)"
+fly deploy
+```
+
+On a host that exposes only one port, set `UGA_SINGLE_PORT=1` (the Fly config
+does this) and previews are served from the console origin at `/p/<app_id>/`.
+
 ### Environment variables
 
 | Variable | Default | Purpose |
 | --- | --- | --- |
-| `UGA_PORT` | `12000` | console port |
+| `UGA_PORT` | `12000` | console port (falls back to `PORT`) |
 | `UGA_PREVIEW_PORT` | `12001` | preview proxy port |
+| `UGA_SINGLE_PORT` | off | serve previews from the console port at `/p` instead of a second port |
+| `UGA_PUBLIC_BASE` | auto | public origin used to build preview URLs |
 | `UGA_AGENT_SERVER_URL` | `http://127.0.0.1:60000` | local agent server |
 | `UGA_AGENT_SESSION_KEY` | auto-discovered | agent-server API key |
 | `UGA_MODEL` | `openhands/deepseek-v4.1-flash` | default model the agent uses |

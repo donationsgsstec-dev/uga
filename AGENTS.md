@@ -58,20 +58,43 @@ to get wrong:
 ## Layout
 
 ```
+Dockerfile               single-container image (root build context)
+fly.toml                 Fly.io app: one port, always-on, /data volume
+DEPLOY.md                Fly.io deployment guide + LLM-credential caveats
 uga/
   run.py                 starts the console (12000) and preview (12001) servers
+  start.sh               container entrypoint: agent server + UGA
   backend/
-    config.py            ports, paths, agent-server key discovery
+    config.py            ports, paths, agent-server key discovery, single-port mode
     store.py             app registry (data/apps.json)
     agent.py             agent-server client + event normalisation
     runner.py            detect mode -> install/build -> start/stop process
     orchestrator.py      build pipeline + SSE EventHub
-    proxy.py             preview proxy (/p/<app_id>/)
+    proxy.py             preview proxy (/p/<app_id>/); `router` is mountable
     main.py              HTTP API + UI host
+    requirements-agent.txt  pinned openhands-agent-server (deploy only)
   frontend/              React + Vite console (build with `npm run build`)
   apps/<app_id>/         per-app workspace (project/, logs/) - gitignored
   data/apps.json         registry - gitignored
 ```
+
+## Deployment (Fly.io)
+
+- **One public port.** `UGA_SINGLE_PORT=1` mounts `backend.proxy:router` into
+  `main.py` at `/p`, so previews share the console origin. `run.py` skips the
+  second server. Two-port mode is unchanged when the flag is off.
+- **`PORT` is honoured** (falls back to `UGA_PORT`, then `12000`).
+- **Always-on is deliberate.** `auto_stop_machines = "off"` in `fly.toml`;
+  builds run in background threads and would be killed on scale-to-zero.
+- **The agent server needs its own LLM credential.** It is started on loopback
+  by `start.sh`. Per-user API-key sign-ins store their own provider connection;
+  free/demo users need a platform credential (`LLM_MODEL`/`LLM_API_KEY`) or they
+  will fail at build time. The `OH_LLM_API_KEY_REFRESH_*` managed credentials
+  seen in the hosted runtime are environment-specific and do not transfer.
+- **Persistent state** is the Fly volume at `/data` (`UGA_DATA_DIR`). Do not
+  declare `VOLUME` in the Dockerfile — Fly manages the mount.
+- `fly.toml`/`Dockerfile` live at the repo root because that is the build
+  context and the git toplevel; the app itself is under `uga/`.
 
 ## Working conventions
 

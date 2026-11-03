@@ -20,7 +20,10 @@ def _serve_preview() -> None:
 
 
 def main() -> None:
-    threading.Thread(target=_serve_preview, daemon=True).start()
+    # In single-port mode the preview proxy is mounted inside the console app
+    # (see backend.main), so we don't bind a second public port.
+    if not config.SINGLE_PORT:
+        threading.Thread(target=_serve_preview, daemon=True).start()
     uvicorn.run("backend.main:api", host=config.HOST, port=config.PORT, log_level="info")
 
 

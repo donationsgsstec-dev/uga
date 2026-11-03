@@ -382,6 +382,15 @@ async def _on_startup() -> None:
 
 
 # --------------------------------------------------------------------------- #
+# Preview (single-port deployments serve it from this same app/origin)
+# --------------------------------------------------------------------------- #
+if config.SINGLE_PORT:
+    from .proxy import router as preview_router
+
+    api.include_router(preview_router)
+
+
+# --------------------------------------------------------------------------- #
 # UI
 # --------------------------------------------------------------------------- #
 if config.FRONTEND_DIST.is_dir():

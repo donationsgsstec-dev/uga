@@ -1,0 +1,3 @@
+# The OpenHands agent server the platform drives to generate apps.
+# Pinned to the version verified against backend/agent.py's API usage.
+openhands-agent-server==1.59.0

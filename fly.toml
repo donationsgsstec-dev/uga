@@ -1,0 +1,49 @@
+# Fly.io deployment for the UGA build platform.
+#
+# Single public port: the preview proxy is mounted into the console app at /p
+# (UGA_SINGLE_PORT=1), so both the console and generated-app previews share one
+# origin. The agent server runs on loopback inside the machine.
+#
+# IMPORTANT: auto_stop_machines is "off" on purpose. Builds run in background
+# threads for minutes and would be killed if the machine scaled to zero.
+
+app = "uga"
+primary_region = "iad"
+
+# Give background builds time to finish before the machine is torn down.
+# (Top-level keys must be declared before any table sections.)
+kill_timeout = 30
+
+[build]
+  dockerfile = "Dockerfile"
+
+[env]
+  UGA_SINGLE_PORT = "1"
+  UGA_AGENT_SERVER_URL = "http://127.0.0.1:60000"
+  # Pin every build to one model (leave empty to honour each user's own model).
+  UGA_FORCED_MODEL = "openhands/deepseek-v4.1-flash"
+
+[http_service]
+  internal_port = 12000
+  force_https = true
+  # Keep the machine running 24/7; never scale to zero.
+  auto_stop_machines = "off"
+  auto_start_machines = false
+  min_machines_running = 1
+
+  [[http_service.checks]]
+    interval = "30s"
+    timeout = "5s"
+    grace_period = "30s"
+    method = "GET"
+    path = "/api/health"
+
+[[vm]]
+  size = "shared-cpu-2x"
+  memory = "2gb"
+
+# Persistent state: app registry, auth store, and generated app workspaces.
+# Create it first:  fly volumes create uga_data --size 10 --region iad
+[[mounts]]
+  source = "uga_data"
+  destination = "/data"

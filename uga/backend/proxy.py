@@ -11,12 +11,16 @@ import mimetypes
 from pathlib import Path
 
 import httpx
-from fastapi import FastAPI, Request
+from fastapi import APIRouter, FastAPI, Request
 from fastapi.responses import FileResponse, HTMLResponse, Response
 
 from . import runner
 from .store import store
 
+# The preview surface is a router so it can either run as its own app on a
+# dedicated port (two-host deployments) or be mounted into the console app
+# (single-port deployments such as Fly.io / PaaS).
+router = APIRouter()
 app = FastAPI(title="UGA Preview", docs_url=None, redoc_url=None)
 
 HOP_BY_HOP = {
@@ -105,8 +109,8 @@ def index() -> HTMLResponse:
     return _page("UGA preview", rows)
 
 
-@app.api_route("/p/{app_id}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"])
-@app.api_route(
+@router.api_route("/p/{app_id}", methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"])
+@router.api_route(
     "/p/{app_id}/{subpath:path}",
     methods=["GET", "POST", "PUT", "PATCH", "DELETE", "HEAD", "OPTIONS"],
 )
@@ -138,3 +142,7 @@ async def preview(app_id: str, request: Request, subpath: str = "") -> Response:
         media_type=media_type or "application/octet-stream",
         headers={"Cache-Control": "no-store"},
     )
+
+
+# Standalone preview app (dedicated port) shares the exact same routes.
+app.include_router(router)

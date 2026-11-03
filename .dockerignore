@@ -1,0 +1,12 @@
+# Never ship local state, build artefacts, or secrets into the image.
+uga/data/
+uga/apps/
+**/__pycache__/
+**/*.pyc
+uga/frontend/node_modules/
+uga/frontend/dist/
+.venv/
+venv/
+.git/
+.env
+*.log

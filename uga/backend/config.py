@@ -20,8 +20,19 @@ DATA_DIR.mkdir(parents=True, exist_ok=True)
 LOGS_DIR.mkdir(parents=True, exist_ok=True)
 
 HOST = os.environ.get("UGA_HOST", "0.0.0.0")
-PORT = int(os.environ.get("UGA_PORT", "12000"))
+# PaaS hosts inject PORT; prefer it, then UGA_PORT, then the default.
+PORT = int(os.environ.get("PORT") or os.environ.get("UGA_PORT") or "12000")
 PREVIEW_PORT = int(os.environ.get("UGA_PREVIEW_PORT", "12001"))
+
+# Single-port mode serves the preview proxy from the console app (mounted at
+# /p) instead of binding a second public port. Required on hosts that expose
+# only one port (Fly.io single service, Render, Railway, HF). Auto-enabled
+# when UGA_PUBLIC_BASE names the one public origin.
+PUBLIC_BASE = os.environ.get("UGA_PUBLIC_BASE", "").strip()
+SINGLE_PORT = (
+    os.environ.get("UGA_SINGLE_PORT", "").strip().lower() in ("1", "true", "yes")
+    or bool(PUBLIC_BASE)
+)
 
 # Ports handed to generated apps' own dev/prod servers.
 APP_PORT_RANGE_START = int(os.environ.get("UGA_APP_PORT_START", "12100"))
@@ -80,14 +91,20 @@ SESSION_API_KEY = _discover_session_api_key()
 
 
 def _public_base(prefix: str) -> str:
-    explicit = os.environ.get("UGA_PUBLIC_BASE")
+    # An explicit base is an operator choice and wins; otherwise fall back to
+    # the runtime's auto-detected two-host pattern (work-1/work-2), then to the
+    # Fly.io app host when deployed there.
+    explicit = os.environ.get("UGA_PUBLIC_BASE", "").strip()
+    if explicit:
+        return explicit if explicit.endswith("/") else explicit + "/"
+    fly_app = os.environ.get("FLY_APP_NAME", "").strip()
+    if fly_app:
+        return f"https://{fly_app}.fly.dev/"
     runtime_url = os.environ.get("RUNTIME_URL", "")
     if runtime_url:
         host = urlparse(runtime_url).netloc
         if host:
             return f"https://{prefix}-{host}/"
-    if explicit:
-        return explicit
     return f"http://localhost:{PORT}/"
 
 
